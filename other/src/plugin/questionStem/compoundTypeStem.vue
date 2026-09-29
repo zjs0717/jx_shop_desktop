@@ -1,0 +1,697 @@
+<template>
+  <!--复合题组件-->
+  <div
+    class="compoundTypeStem"
+    :class="{
+      disabledResponse: !disabledResponse,
+      compound_viewall: paperState != 1,
+    }"
+  >
+    <!-- 题干 -->
+    <topic-drt
+      :disabledResponse="disabledResponse"
+      :orderNum="orderNum"
+      :stem="compoundDetails.stem"
+      v-if="showBlock != 7"
+      :showType="showType"
+      :type="compoundDetails.type"
+    >
+    </topic-drt>
+    <!-- 预览使用 -->
+
+    <div
+      v-if="
+        ((paperState == 0 && compoundDetails.type != 7) ||
+          (paperState == 2 && !isSwider)) && !hideSmall
+      "
+    >
+      <div
+        v-for="(item4, index4) in compoundDetails.componentQuestionModels"
+        :key="index4"
+      >
+        <template
+          v-if="
+            !(
+              (paperDataHandler(item4).type == 4 ||
+                paperDataHandler(item4).type == 5) &&
+              paperState == 0 &&
+              !item4.stem
+            ) || paperState != 0
+          "
+        >
+          <base-type-stem
+            :questionDetails="paperDataHandler(item4)"
+            
+			      :parentType="compoundDetails.type"
+            :paperState="paperState"
+            :orderNum="index4 + 1"
+            :topicSmall="true"
+            :showBlock="showBlock"
+            :knowledgeString="knowledgeString"
+            :showType="showType"
+            :showLowerType="showLowerType"
+            :showKnowledgePoint="showKnowledgePoint"
+            :disabledResponse="disabledResponse"
+            :propsSubjectCode="propsSubjectCode"
+          >
+            <template v-slot:optionitem="{ optionitem }">
+              <slot name="bases" v-bind:bases="optionitem"> </slot>
+            </template>
+
+            <template v-slot:custom="{ question }">
+              <slot name="custom" v-bind:question="{...question, orderNum: index4 + 1}"></slot>
+            </template>
+
+          </base-type-stem>
+        </template>
+      </div>
+    </div>
+
+    <!--答题板-->
+
+    <slot name="answerSheet" :scope="compoundDetails">
+      <div
+        v-if="(paperState == 1 && compoundDetails.type > 5) || isSwider"
+        class="compoundTypeStem-answerSheet"
+      >
+        <answer-sheet
+          :showType="showType"
+          :showLowerType="showLowerType"
+          :questionType="compoundDetails.type"
+          :orderNum="orderNum"
+          :gainBtnShow="gainBtnShow"
+          @beginGestalt="beginGestalt"
+          @getnowIndex="getnowIndex"
+          @twoChoice="twoChoice"
+          :getSmallBtn="getSmallBtn"
+          :componentQuestion="compoundDetails.componentQuestionModels"
+          :paperState="paperState"
+          :disabledResponse="disabledResponse"
+          :parentType="compoundDetails.type"
+        >
+        </answer-sheet>
+      </div>
+    </slot>
+  </div>
+</template>
+
+<script>
+export default {
+  name: "cm-compoundcm-question",
+  props: {
+    // 试卷状态，0 预览  1 做答中 2 作答完成
+    paperState: {
+      type: String | Number,
+      default: 0,
+    },
+    // 知识点文案
+    knowledgeString: {
+      type: String,
+      default: "",
+    },
+    // 试题信息
+    compoundDetails: {
+      type: Object,
+      default: function() {
+        return {};
+      },
+    },
+    /**
+     * 试题序号
+     */
+    orderNum: {
+      type: String | Number,
+      default: "1",
+    },
+    // 是否展示答题板形式
+    isSwider: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * 区分展示题干/作答/答案/解析
+     * 为空 => 全部展示
+     * 1 => 只展示题干
+     * 2 => 只展示题干及作答
+     * 3 => 只展示答案
+     * 4 => 只展示解析
+     * 5 => 只展示知识点
+     * 6 => 只隐藏我的作答
+     * 7 => 只展示答案和解析
+     */
+    showBlock: {
+      type: String | Number,
+      default: "",
+    },
+    // 是否展示产生式
+    showKnowledgePoint: {
+      type: Boolean,
+      default: false,
+    },
+
+    // 自判题是否展示获取小题按钮 false == 展示，true == 不展示
+    getSmallBtn: {
+      type: Boolean,
+      default: false,
+    },
+
+    // 预览态是否隐藏复合题小题（只保留题干）true => 隐藏
+    hideSmall: {
+      type: Boolean,
+      default: false,
+    },
+
+    /**
+     * 获取试题按钮是否展示 true = 不展示
+     */
+    gainBtnShow: {
+      type: Boolean,
+      default: false,
+    },
+
+    /**
+     * 是否展示题型
+     */
+    showType: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * 是否展示复合小题题型
+     */
+    showLowerType: {
+      type: Boolean,
+      default: false,
+    },
+
+    // 是否禁用响应式 true == 禁用 false == 响应式
+    disabledResponse: {
+      type: Boolean,
+      default: false,
+    },
+    propsSubjectCode: {
+      type: String | Number,
+      default: 0
+    }
+  },
+  components: {
+    baseTypeStem: () => import("./baseTypeStem"), // 基础题型组件
+    answerSheet: () => import("../answerPanel/index"), // 作答面板
+    topicDrt: () => import("../topicDrt/index"), // 题干组件
+  },
+  data() {
+    return {
+      stemPB: "0", // 题干距离底部的padding值（复合题）
+      getHeight: "calc(100vh - 216.25px)", // 符合小题答题板高度
+      // analysis: '',//解析
+    };
+  },
+  created() {},
+  mounted() {},
+  methods: {
+    /**
+     * 复合题提交
+     * @param {Boolean} val true == 失焦
+     */
+    twoChoice(optionitem, emitoption, index, val) {
+      this.$emit("twoChoice", optionitem, emitoption, index, val);
+    },
+    //复合题中点击获取试题
+    beginGestalt(componentQuestion) {
+      this.$emit("beginGestalt", componentQuestion);
+    },
+    //复合题中点击下方小题
+    getnowIndex(item) {
+      this.$emit("getnowIndex", item);
+    },
+  },
+};
+</script>
+<style scoped lang="scss">
+.compoundTypeStem {
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  text-align: left;
+  .topicDrt {
+    white-space: pre-wrap;
+    flex: 1;
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    &::-webkit-scrollbar {
+    width: 4px;
+    display: block;
+    }
+    & > span {
+      word-wrap: normal;
+      word-break: break-word;
+      line-height: 24px;
+    }
+  }
+  .compoundTypeStem-answerSheet {
+    width: 40%;
+  }
+}
+.compound_viewall {
+  flex-direction: column;
+  .topicDrt {
+    touch-action: initial;
+    height: initial;
+    overflow-y: initial;
+    overflow-x: initial;
+  }
+}
+
+@media screen and (max-width: 1024px) {
+    .compoundTypeStem.disabledResponse {
+        flex-direction: column;
+        .topicDrt {
+            // height: 0;
+            &::-webkit-scrollbar {
+            display: none;
+            }
+        }
+        .compoundTypeStem-answerSheet {
+            width: initial;
+        }
+    }
+    
+    .compound_viewall.disabledResponse {
+        // flex-direction: initial;
+    }
+}
+
+@media screen and (min-width: 760px) and (max-width: 850px) {
+  .compoundTypeStem.disabledResponse {
+    .compoundTypeStem-answerSheet {
+      .answerSheet {
+        .start {
+          span {
+            font-size: 24px !important;
+            height: 48px !important;
+            line-height: 48px !important;
+          }
+        }
+      }
+      .answerSheet-content {
+        .top-img {
+          height: 25px !important;
+          img {
+            height: 25px !important;
+            width: 60px !important;
+          }
+        }
+        .bottom-gestalt {
+          .gestalt-wrap-sc {
+            font-size: 24px !important;
+          }
+          .bottom-topic {
+            .baseTypeStem {
+              .topicDrt {
+                span {
+                  font-size: 24px !important;
+                }
+              }
+              .baseTypeStem_key {
+                .options {
+                  .op-item .key {
+                    font-size: 24px !important;
+                  }
+                  .op-item .value_wrap .value {
+                    font-size: 24px !important;
+                  }
+                }
+              }
+
+              .result {
+                padding: 20px 12px 0 !important;
+                .baseKnowledgeModels,
+                .name,
+                .value {
+                  font-size: 24px !important;
+                }
+                .name {
+                  line-height: 40px !important;
+                }
+                .value-4 {
+                  margin-bottom: 10px;
+                }
+                .value {
+                  .analyzeValue {
+                    line-height: 40px !important;
+                  }
+                  span {
+                    font-size: 24px !important;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      .bottom-gestalt-wrap {
+        .swiper-container,
+        .top-index {
+          padding: 20px 0 !important;
+        }
+      }
+    }
+    .bottom-gestalt-wrap {
+      .swiper-container,
+      .top-index {
+        padding: 20px 0 !important;
+      }
+      .swiper-wrapper {
+        .topactive,
+        .swiper-slide {
+          line-height: 38px !important;
+        }
+        .topactive {
+          border: 1px solid #2b83d3 !important;
+          color: #2b83d3 !important;
+        }
+      }
+    }
+    .top-img {
+      display: none;
+    }
+    .bottom-gestalt {
+      min-height: 293px !important;
+      height: 100% !important;
+    }
+  }
+  .compoundTypeStem.disabledResponse {
+    font-size: 24px !important;
+    .topicDrt {
+      font-size: 24px !important;
+      line-height: 40px !important;
+      .topicDrt-content {
+        span {
+          font-size: 24px !important;
+          line-height: 40px !important;
+        }
+        .content_body {
+          font-size: 24px !important;
+          line-height: 40px !important;
+          & > div {
+            font-size: 24px !important;
+            line-height: 40px !important;
+            & > p,
+            span {
+              font-size: 24px !important;
+              line-height: 40px !important;
+            }
+          }
+        }
+      }
+    }
+    .baseTypeStem_key {
+      .options {
+        .op-item .key {
+          font-size: 24px !important;
+        }
+        .op-item .value_wrap .value {
+          font-size: 24px !important;
+          line-height: 40px !important;
+        }
+      }
+      .blanks {
+        .blank {
+          .index {
+            width: 60px !important;
+            font-size: 24px !important;
+          }
+          .cont {
+            textarea {
+              padding-top: 0px !important;
+              height: 32px !important;
+              font-size: 24px !important;
+              &::-webkit-input-placeholder {
+                font-size: 24px !important;
+              }
+            }
+          }
+        }
+      }
+
+      .written {
+        .answerSheet {
+          .top-img {
+            img {
+              width: 60px;
+              height: 40px;
+            }
+          }
+          .bottom-written {
+            textarea {
+              font-size: 24px !important;
+              &::-webkit-input-placeholder {
+                font-size: 24px !important;
+              }
+            }
+          }
+        }
+      }
+    }
+    .compoundTypeStem-answerSheet {
+      .answerSheet {
+        .start {
+          span {
+            font-size: 24px !important;
+            height: 48px !important;
+            line-height: 48px !important;
+          }
+        }
+      }
+      .answerSheet-content {
+        .top-img {
+          height: 25px !important;
+          img {
+            height: 25px !important;
+            width: 60px !important;
+          }
+        }
+      }
+    }
+    
+  }
+}
+@media screen and (min-width: 850px) and (max-width: 1280px) {
+  .compoundTypeStem.disabledResponse {
+    height: 90% !important;
+    font-size: 19px !important;
+    .compoundTypeStem-stem {
+      .topicDrt {
+        span {
+          font-size: 19px !important;
+          line-height: 40px !important;
+        }
+      }
+      .baseTypeStem_key {
+        .options {
+          .op-item .key {
+            font-size: 19px !important;
+          }
+          .op-item .value_wrap .value {
+            font-size: 19px !important;
+          }
+        }
+      }
+    }
+    .compoundTypeStem-answerSheet {
+      .answerSheet {
+        .start {
+          span {
+            font-size: 19px !important;
+            height: 48px !important;
+            line-height: 48px !important;
+          }
+        }
+      }
+      .answerSheet-content {
+        .top-img {
+          height: 25px !important;
+          img {
+            height: 25px !important;
+            width: 60px !important;
+          }
+        }
+        .bottom-gestalt {
+          .gestalt-wrap-sc {
+            font-size: 19px !important;
+          }
+          .bottom-topic {
+            .baseTypeStem {
+              .topicDrt {
+                span {
+                  font-size: 19px !important;
+                }
+              }
+              .baseTypeStem_key {
+                .options {
+                  .op-item .key {
+                    font-size: 19px !important;
+                  }
+                  .op-item .value_wrap .value {
+                    font-size: 19px !important;
+                  }
+                }
+              }
+
+              .result {
+                padding: 20px 12px 0 !important;
+                .baseKnowledgeModels,
+                .name,
+                .value {
+                  font-size: 19px !important;
+                }
+                .name {
+                  line-height: 40px !important;
+                }
+                .value-4 {
+                  margin-bottom: 10px;
+                }
+                .value {
+                  .analyzeValue {
+                    line-height: 40px !important;
+                  }
+                  span {
+                    font-size: 19px !important;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      .bottom-gestalt-wrap {
+        .swiper-container,
+        .top-index {
+          padding: 20px 0 !important;
+        }
+      }
+    }
+    .bottom-gestalt-wrap {
+      .swiper-container,
+      .top-index {
+        padding: 20px 0 !important;
+      }
+      .swiper-wrapper {
+        .topactive,
+        .swiper-slide {
+          line-height: 38px !important;
+        }
+        .topactive {
+          border: 1px solid #2b83d3 !important;
+          color: #2b83d3 !important;
+        }
+      }
+    }
+    .top-img {
+      display: none;
+    }
+    .bottom-gestalt {
+      min-height: 293px !important;
+      height: 100% !important;
+    }
+  }
+  .compoundTypeStem.disabledResponse {
+    font-size: 19px !important;
+    .topicDrt {
+      font-size: 19px !important;
+      line-height: 40px !important;
+      .topicDrt-content {
+        span {
+          font-size: 19px !important;
+          line-height: 40px !important;
+        }
+        .content_body {
+          font-size: 19px !important;
+          line-height: 40px !important;
+          & > div {
+            font-size: 19px !important;
+            line-height: 40px !important;
+            & > p,
+            span {
+              font-size: 19px !important;
+              line-height: 40px !important;
+            }
+          }
+        }
+      }
+    }
+    .baseTypeStem_key {
+      .options {
+        .op-item .key {
+          font-size: 19px !important;
+        }
+        .op-item .value_wrap .value {
+          font-size: 19px !important;
+          line-height: 40px !important;
+        }
+      }
+      .blanks {
+        .blank {
+          .index {
+            width: 60px !important;
+            font-size: 19px !important;
+          }
+          .cont {
+            textarea {
+              padding-top: 0px !important;
+              height: 32px !important;
+              font-size: 19px !important;
+              &::-webkit-input-placeholder {
+                font-size: 19px !important;
+              }
+            }
+          }
+        }
+      }
+
+      .written {
+        .answerSheet {
+          .top-img {
+            img {
+              width: 60px;
+              height: 40px;
+            }
+          }
+          .bottom-written {
+            textarea {
+              font-size: 19px !important;
+              &::-webkit-input-placeholder {
+                font-size: 19px !important;
+              }
+            }
+          }
+        }
+      }
+    }
+    .compoundTypeStem-answerSheet {
+      .answerSheet {
+        .start {
+          span {
+            font-size: 19px !important;
+            height: 48px !important;
+            line-height: 48px !important;
+          }
+        }
+      }
+      .answerSheet-content {
+        .top-img {
+          height: 25px !important;
+          img {
+            height: 25px !important;
+            width: 60px !important;
+          }
+        }
+      }
+    }
+  }
+}
+</style>
